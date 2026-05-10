@@ -4,7 +4,7 @@ use std::str::FromStr;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 
 use crate::ai::{AiChatMessage, AiConfig, AiConversation};
-use crate::handoff::HandoffItem;
+use crate::handoff::{HandoffItem, HandoffStatus};
 use crate::history::HistoryEntry;
 use crate::models::connection::ConnectionConfig;
 use crate::saved_sql::{SavedSqlFile, SavedSqlFolder, SavedSqlLibrary};
@@ -144,10 +144,11 @@ async fn ensure_history_columns(pool: &SqlitePool) -> Result<(), String> {
 }
 
 async fn ensure_handoffs_sequence(pool: &SqlitePool) -> Result<(), String> {
-    let (seq_columns,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM pragma_table_info('handoffs') WHERE name = 'seq'")
-        .fetch_one(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    let (seq_columns,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM pragma_table_info('handoffs') WHERE name = 'seq'")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| e.to_string())?;
 
     if seq_columns > 0 {
         return Ok(());
@@ -299,10 +300,7 @@ impl Storage {
 impl Storage {
     pub async fn save_handoff(&self, item: &HandoffItem) -> Result<(), String> {
         let json = serde_json::to_string(item).map_err(|e| e.to_string())?;
-        let status = serde_json::to_value(&item.status)
-            .ok()
-            .and_then(|value| value.as_str().map(str::to_string))
-            .ok_or_else(|| "Failed to serialize handoff status".to_string())?;
+        let status = handoff_status_value(&item.status)?;
 
         sqlx::query(
             "INSERT INTO handoffs (id, payload_json, status, created_at) \
@@ -323,6 +321,32 @@ impl Storage {
         Ok(())
     }
 
+    pub async fn update_handoff_status(&self, id: &str, status: HandoffStatus) -> Result<bool, String> {
+        let row: Option<(String,)> = sqlx::query_as("SELECT payload_json FROM handoffs WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&self.db)
+            .await
+            .map_err(|e| e.to_string())?;
+        let Some((payload_json,)) = row else {
+            return Ok(false);
+        };
+
+        let mut item: HandoffItem = serde_json::from_str(&payload_json).map_err(|e| e.to_string())?;
+        item.status = status;
+        let updated_json = serde_json::to_string(&item).map_err(|e| e.to_string())?;
+        let status_value = handoff_status_value(&item.status)?;
+
+        sqlx::query("UPDATE handoffs SET payload_json = ?, status = ? WHERE id = ?")
+            .bind(updated_json)
+            .bind(status_value)
+            .bind(id)
+            .execute(&self.db)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(true)
+    }
+
     pub async fn load_pending_handoffs(&self) -> Result<Vec<HandoffItem>, String> {
         let rows: Vec<(String,)> = sqlx::query_as(
             "SELECT payload_json FROM handoffs \
@@ -335,6 +359,13 @@ impl Storage {
 
         rows.into_iter().map(|(json,)| serde_json::from_str(&json).map_err(|e| e.to_string())).collect()
     }
+}
+
+fn handoff_status_value(status: &HandoffStatus) -> Result<String, String> {
+    serde_json::to_value(status)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .ok_or_else(|| "Failed to serialize handoff status".to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -1057,10 +1088,8 @@ mod handoff_tests {
     async fn handoffs_table_has_stable_autoincrement_sequence() {
         let storage = open_temp_storage().await;
 
-        let columns: Vec<(String,)> = sqlx::query_as("SELECT name FROM pragma_table_info('handoffs')")
-            .fetch_all(&storage.db)
-            .await
-            .unwrap();
+        let columns: Vec<(String,)> =
+            sqlx::query_as("SELECT name FROM pragma_table_info('handoffs')").fetch_all(&storage.db).await.unwrap();
 
         assert!(columns.iter().any(|(name,)| name == "seq"));
     }
@@ -1090,6 +1119,25 @@ mod handoff_tests {
 
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].id, queued.id);
+    }
+
+    #[tokio::test]
+    async fn update_handoff_status_updates_payload_and_pending_visibility() {
+        let storage = open_temp_storage().await;
+        let item = queued_handoff("review me");
+        let missing = uuid::Uuid::new_v4().to_string();
+
+        storage.save_handoff(&item).await.unwrap();
+
+        assert!(storage.update_handoff_status(&item.id, HandoffStatus::Shown).await.unwrap());
+        assert!(!storage.update_handoff_status(&missing, HandoffStatus::Rejected).await.unwrap());
+
+        let shown = storage.load_pending_handoffs().await.unwrap();
+        assert_eq!(shown.len(), 1);
+        assert_eq!(shown[0].status, HandoffStatus::Shown);
+
+        assert!(storage.update_handoff_status(&item.id, HandoffStatus::Rejected).await.unwrap());
+        assert!(storage.load_pending_handoffs().await.unwrap().is_empty());
     }
 }
 

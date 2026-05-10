@@ -17,8 +17,7 @@ pub fn app_data_dir() -> PathBuf {
         return PathBuf::from(path);
     }
 
-    let home = std::env::var(if cfg!(windows) { "APPDATA" } else { "HOME" })
-        .unwrap_or_else(|_| ".".to_string());
+    let home = std::env::var(if cfg!(windows) { "APPDATA" } else { "HOME" }).unwrap_or_else(|_| ".".to_string());
 
     if cfg!(target_os = "macos") {
         PathBuf::from(home).join("Library/Application Support/com.dbx.app")
@@ -43,44 +42,30 @@ pub async fn get_json(path: &str) -> Result<serde_json::Value, String> {
     let runtime = load_runtime().ok_or_else(|| "runtime unavailable".to_string())?;
     let url = runtime_url(&runtime, path, &[])?;
 
-    let response = reqwest::Client::new()
-        .get(url)
-        .bearer_auth(runtime.token)
-        .send()
-        .await
-        .map_err(|err| err.to_string())?;
+    let response =
+        reqwest::Client::new().get(url).bearer_auth(runtime.token).send().await.map_err(|err| err.to_string())?;
 
     let status = response.status();
     if !status.is_success() {
         return Err(format!("runtime request failed with status {status}"));
     }
 
-    response
-        .json()
-        .await
-        .map_err(|err| err.to_string())
+    response.json().await.map_err(|err| err.to_string())
 }
 
 pub async fn get_json_with_query(path: &str, query: &[(&str, String)]) -> Result<serde_json::Value, String> {
     let runtime = load_runtime().ok_or_else(|| "runtime unavailable".to_string())?;
     let url = runtime_url(&runtime, path, query)?;
 
-    let response = reqwest::Client::new()
-        .get(url)
-        .bearer_auth(runtime.token)
-        .send()
-        .await
-        .map_err(|err| err.to_string())?;
+    let response =
+        reqwest::Client::new().get(url).bearer_auth(runtime.token).send().await.map_err(|err| err.to_string())?;
 
     let status = response.status();
     if !status.is_success() {
         return Err(format!("runtime request failed with status {status}"));
     }
 
-    response
-        .json()
-        .await
-        .map_err(|err| err.to_string())
+    response.json().await.map_err(|err| err.to_string())
 }
 
 pub async fn post_json(path: &str, body: serde_json::Value) -> Result<serde_json::Value, String> {
@@ -100,10 +85,7 @@ pub async fn post_json(path: &str, body: serde_json::Value) -> Result<serde_json
         return Err(format!("runtime request failed with status {status}"));
     }
 
-    response
-        .json()
-        .await
-        .map_err(|err| err.to_string())
+    response.json().await.map_err(|err| err.to_string())
 }
 
 fn runtime_url(runtime: &RuntimeDiscovery, path: &str, query: &[(&str, String)]) -> Result<reqwest::Url, String> {

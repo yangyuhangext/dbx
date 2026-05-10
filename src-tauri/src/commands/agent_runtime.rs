@@ -9,6 +9,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{oneshot, RwLock};
 
 use super::connection::AppState;
+use dbx_core::handoff::{HandoffItem, HandoffStatus};
 
 const BIND_ADDR: &str = "127.0.0.1:0";
 const DISCOVERY_FILE: &str = "agent-runtime.json";
@@ -97,8 +98,26 @@ pub async fn agent_runtime_load_handoffs(
     runtime: tauri::State<'_, AgentRuntimeServer>,
 ) -> Result<Vec<dbx_core::handoff::HandoffItem>, String> {
     let mut items = app_state.storage.load_pending_handoffs().await?;
-    items.extend(runtime.state().handoffs.read().await.iter().cloned());
+    items.extend(pending_runtime_handoffs(runtime.state()).await);
     Ok(items)
+}
+
+#[tauri::command]
+pub async fn agent_runtime_mark_handoff_shown(
+    app_state: tauri::State<'_, Arc<AppState>>,
+    runtime: tauri::State<'_, AgentRuntimeServer>,
+    id: String,
+) -> Result<bool, String> {
+    update_handoff_status(app_state.inner().as_ref(), runtime.state(), &id, HandoffStatus::Shown).await
+}
+
+#[tauri::command]
+pub async fn agent_runtime_reject_handoff(
+    app_state: tauri::State<'_, Arc<AppState>>,
+    runtime: tauri::State<'_, AgentRuntimeServer>,
+    id: String,
+) -> Result<bool, String> {
+    update_handoff_status(app_state.inner().as_ref(), runtime.state(), &id, HandoffStatus::Rejected).await
 }
 
 pub fn start(app: AppHandle) -> AgentRuntimeServer {
@@ -306,10 +325,7 @@ async fn route_request(first_line: &str, body: &str, state: &AgentRuntimeState) 
         if let Some(limit) = query_limit(first_line) {
             truncate_result_rows(&mut body, limit);
         }
-        return RuntimeResponse {
-            status: "200 OK",
-            body,
-        };
+        return RuntimeResponse { status: "200 OK", body };
     }
 
     if first_line.starts_with("POST /handoff ") {
@@ -329,6 +345,37 @@ async fn route_request(first_line: &str, body: &str, state: &AgentRuntimeState) 
     }
 
     RuntimeResponse { status: "404 Not Found", body: serde_json::json!({"error": "not found"}) }
+}
+
+async fn update_handoff_status(
+    app_state: &AppState,
+    runtime: &AgentRuntimeState,
+    id: &str,
+    status: HandoffStatus,
+) -> Result<bool, String> {
+    let stored = app_state.storage.update_handoff_status(id, status.clone()).await?;
+    let runtime_updated = update_runtime_handoff_status(runtime, id, status).await;
+    Ok(stored || runtime_updated)
+}
+
+async fn update_runtime_handoff_status(state: &AgentRuntimeState, id: &str, status: HandoffStatus) -> bool {
+    let mut handoffs = state.handoffs.write().await;
+    if let Some(item) = handoffs.iter_mut().find(|item| item.id == id) {
+        item.status = status;
+        return true;
+    }
+    false
+}
+
+async fn pending_runtime_handoffs(state: &AgentRuntimeState) -> Vec<HandoffItem> {
+    state
+        .handoffs
+        .read()
+        .await
+        .iter()
+        .filter(|item| matches!(item.status, HandoffStatus::Queued | HandoffStatus::Shown))
+        .cloned()
+        .collect()
 }
 
 fn query_limit(first_line: &str) -> Option<usize> {
@@ -561,6 +608,30 @@ mod tests {
 
         let response = String::from_utf8(response).unwrap();
         assert!(response.starts_with("HTTP/1.1 413 Payload Too Large"), "{response}");
+    }
+
+    #[tokio::test]
+    async fn runtime_handoff_status_updates_filter_pending_items() {
+        let state = runtime_state();
+        let item = dbx_core::handoff::HandoffItem::queued(
+            "conn-1".to_string(),
+            "Local".to_string(),
+            Some("main".to_string()),
+            "Review SQL".to_string(),
+            None,
+            "update users set name = 'a'".to_string(),
+            dbx_core::sql_safety::OperationClass::Write,
+            dbx_core::sql_safety::RiskLevel::Medium,
+            false,
+        );
+        let id = item.id.clone();
+        state.handoffs.write().await.push(item);
+
+        assert!(update_runtime_handoff_status(&state, &id, dbx_core::handoff::HandoffStatus::Shown).await);
+        assert_eq!(pending_runtime_handoffs(&state).await[0].status, dbx_core::handoff::HandoffStatus::Shown);
+
+        assert!(update_runtime_handoff_status(&state, &id, dbx_core::handoff::HandoffStatus::Rejected).await);
+        assert!(pending_runtime_handoffs(&state).await.is_empty());
     }
 
     #[test]

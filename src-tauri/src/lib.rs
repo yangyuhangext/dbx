@@ -61,6 +61,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::agent_runtime::agent_runtime_update_snapshot,
             commands::agent_runtime::agent_runtime_load_handoffs,
+            commands::agent_runtime::agent_runtime_mark_handoff_shown,
+            commands::agent_runtime::agent_runtime_reject_handoff,
             commands::ai::ai_complete,
             commands::ai::ai_stream,
             commands::ai::ai_cancel_stream,

@@ -165,7 +165,11 @@ pub async fn execute_query(pool: &SqlitePool, sql: &str) -> Result<QueryResult, 
     execute_query_with_row_limit(pool, sql, crate::query::MAX_ROWS).await
 }
 
-pub async fn execute_query_with_row_limit(pool: &SqlitePool, sql: &str, row_limit: usize) -> Result<QueryResult, String> {
+pub async fn execute_query_with_row_limit(
+    pool: &SqlitePool,
+    sql: &str,
+    row_limit: usize,
+) -> Result<QueryResult, String> {
     let start = Instant::now();
     let row_limit = row_limit.max(1);
 

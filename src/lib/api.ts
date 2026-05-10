@@ -75,6 +75,8 @@ export const cancelQuery = forward("cancelQuery");
 // Agent Runtime
 export const agentRuntimeUpdateSnapshot = forward("agentRuntimeUpdateSnapshot");
 export const agentRuntimeLoadHandoffs = forward("agentRuntimeLoadHandoffs");
+export const agentRuntimeMarkHandoffShown = forward("agentRuntimeMarkHandoffShown");
+export const agentRuntimeRejectHandoff = forward("agentRuntimeRejectHandoff");
 
 // AI
 export const aiComplete = forward("aiComplete");

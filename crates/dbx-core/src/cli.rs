@@ -116,8 +116,12 @@ where
         let source = source.ok_or_else(|| de::Error::missing_field("source"))?;
 
         match (ok, has_data, has_error) {
-            (true, true, false) => Ok(CliEnvelope::Success { ok, source, data: data.expect("data presence was checked") }),
-            (false, false, true) => Ok(CliEnvelope::Failure { ok, source, error: error.expect("error presence was checked") }),
+            (true, true, false) => {
+                Ok(CliEnvelope::Success { ok, source, data: data.expect("data presence was checked") })
+            }
+            (false, false, true) => {
+                Ok(CliEnvelope::Failure { ok, source, error: error.expect("error presence was checked") })
+            }
             (true, _, _) => Err(de::Error::custom("ok=true requires data without error")),
             (false, _, _) => Err(de::Error::custom("ok=false requires error without data")),
         }

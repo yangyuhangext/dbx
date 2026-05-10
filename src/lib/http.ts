@@ -40,6 +40,7 @@ import type {
   TableImportProgress,
 } from "./tauri";
 import type { AgentRuntimeSnapshot } from "@/lib/agentRuntimeSnapshot";
+import type { AgentHandoffItem } from "@/lib/agentHandoff";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -293,8 +294,16 @@ export async function cancelQuery(executionId: string): Promise<boolean> {
 
 export async function agentRuntimeUpdateSnapshot(_snapshot: AgentRuntimeSnapshot): Promise<void> {}
 
-export async function agentRuntimeLoadHandoffs(): Promise<unknown[]> {
+export async function agentRuntimeLoadHandoffs(): Promise<AgentHandoffItem[]> {
   return [];
+}
+
+export async function agentRuntimeMarkHandoffShown(_id: string): Promise<boolean> {
+  return false;
+}
+
+export async function agentRuntimeRejectHandoff(_id: string): Promise<boolean> {
+  return false;
 }
 
 // ---------------------------------------------------------------------------

@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import ConnectionDialog from "@/components/connection/ConnectionDialog.vue";
+import AgentHandoffDialog from "@/components/agent/AgentHandoffDialog.vue";
 import EditorSettingsDialog from "@/components/editor/EditorSettingsDialog.vue";
 import DangerConfirmDialog from "@/components/editor/DangerConfirmDialog.vue";
 const DataTransferDialog = defineAsyncComponent(() => import("@/components/transfer/DataTransferDialog.vue"));
@@ -92,6 +93,7 @@ watch(
 </script>
 
 <template>
+  <AgentHandoffDialog />
   <ConnectionDialog
     :open="showConnectionDialog"
     :edit-config="editConfig"
