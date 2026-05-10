@@ -21,6 +21,8 @@ pub struct HandoffItem {
     pub id: String,
     pub created_at: DateTime<Utc>,
     pub created_by: String,
+    #[serde(default)]
+    pub connection_id: String,
     pub connection_name: String,
     pub database: Option<String>,
     pub title: String,
@@ -36,6 +38,7 @@ pub struct HandoffItem {
 
 impl HandoffItem {
     pub fn queued(
+        connection_id: String,
         connection_name: String,
         database: Option<String>,
         title: String,
@@ -49,6 +52,7 @@ impl HandoffItem {
             id: Uuid::new_v4().to_string(),
             created_at: Utc::now(),
             created_by: "dbx-cli".to_string(),
+            connection_id,
             connection_name,
             database,
             title,

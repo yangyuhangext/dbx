@@ -86,7 +86,8 @@ const SCHEMA_STATEMENTS: &[&str] = &[
         updated_at TEXT NOT NULL DEFAULT ''
     )",
     "CREATE TABLE IF NOT EXISTS handoffs (
-        id TEXT PRIMARY KEY,
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT NOT NULL UNIQUE,
         payload_json TEXT NOT NULL,
         status TEXT NOT NULL,
         created_at TEXT NOT NULL
@@ -108,6 +109,7 @@ impl Storage {
             sqlx::query(statement).execute(&pool).await.map_err(|e| e.to_string())?;
         }
         ensure_history_columns(&pool).await?;
+        ensure_handoffs_sequence(&pool).await?;
 
         Ok(Self { db: pool })
     }
@@ -138,6 +140,48 @@ async fn ensure_history_columns(pool: &SqlitePool) -> Result<(), String> {
             .await
             .map_err(|e| e.to_string())?;
     }
+    Ok(())
+}
+
+async fn ensure_handoffs_sequence(pool: &SqlitePool) -> Result<(), String> {
+    let (seq_columns,): (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM pragma_table_info('handoffs') WHERE name = 'seq'")
+            .fetch_one(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+    if seq_columns > 0 {
+        return Ok(());
+    }
+
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    sqlx::query(
+        "CREATE TABLE handoffs_migration (
+            seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            id TEXT NOT NULL UNIQUE,
+            payload_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )",
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+    sqlx::query(
+        "INSERT INTO handoffs_migration (id, payload_json, status, created_at)
+         SELECT id, payload_json, status, created_at
+         FROM handoffs
+         ORDER BY created_at ASC, rowid ASC",
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+    sqlx::query("DROP TABLE handoffs").execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    sqlx::query("ALTER TABLE handoffs_migration RENAME TO handoffs")
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    tx.commit().await.map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -262,8 +306,12 @@ impl Storage {
             .ok_or_else(|| "Failed to serialize handoff status".to_string())?;
 
         sqlx::query(
-            "INSERT OR REPLACE INTO handoffs (id, payload_json, status, created_at) \
-             VALUES (?, ?, ?, ?)",
+            "INSERT INTO handoffs (id, payload_json, status, created_at) \
+             VALUES (?, ?, ?, ?) \
+             ON CONFLICT(id) DO UPDATE SET \
+             payload_json = excluded.payload_json, \
+             status = excluded.status, \
+             created_at = excluded.created_at",
         )
         .bind(&item.id)
         .bind(json)
@@ -280,7 +328,7 @@ impl Storage {
         let rows: Vec<(String,)> = sqlx::query_as(
             "SELECT payload_json FROM handoffs \
              WHERE status IN ('queued', 'shown') \
-             ORDER BY created_at ASC",
+             ORDER BY created_at ASC, seq ASC",
         )
         .fetch_all(&self.db)
         .await
@@ -959,6 +1007,7 @@ mod handoff_tests {
 
     fn queued_handoff(title: &str) -> HandoffItem {
         HandoffItem::queued(
+            "prod-main-id".to_string(),
             "prod-main".to_string(),
             Some("app".to_string()),
             title.to_string(),
@@ -988,6 +1037,42 @@ mod handoff_tests {
         assert_eq!(loaded[1].status, HandoffStatus::Shown);
         assert_eq!(loaded[0].operation_class, OperationClass::Write);
         assert!(loaded[0].is_production);
+    }
+
+    #[tokio::test]
+    async fn load_pending_handoffs_keeps_fifo_order_for_matching_created_at() {
+        let storage = open_temp_storage().await;
+        let first = queued_handoff("first");
+        let mut second = queued_handoff("second");
+        second.created_at = first.created_at;
+
+        storage.save_handoff(&first).await.unwrap();
+        storage.save_handoff(&second).await.unwrap();
+
+        let loaded = storage.load_pending_handoffs().await.unwrap();
+
+        assert_eq!(loaded.iter().map(|item| item.title.as_str()).collect::<Vec<_>>(), vec!["first", "second"]);
+    }
+
+    #[tokio::test]
+    async fn handoffs_table_has_stable_autoincrement_sequence() {
+        let storage = open_temp_storage().await;
+
+        let columns: Vec<(String,)> =
+            sqlx::query_as("SELECT name FROM pragma_table_info('handoffs')").fetch_all(&storage.db).await.unwrap();
+
+        assert!(columns.iter().any(|(name,)| name == "seq"));
+    }
+
+    #[tokio::test]
+    async fn handoff_item_serializes_connection_id_and_display_name() {
+        let item = queued_handoff("serialize");
+
+        let value = serde_json::to_value(&item).unwrap();
+
+        assert_eq!(item.connection_id, "prod-main-id");
+        assert_eq!(value["connectionId"], "prod-main-id");
+        assert_eq!(value["connectionName"], "prod-main");
     }
 
     #[tokio::test]
