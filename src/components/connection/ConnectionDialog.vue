@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import { uuid } from "@/lib/utils";
 import { useI18n } from "vue-i18n";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -17,7 +18,7 @@ import * as api from "@/lib/api";
 import { isTauriRuntime } from "@/lib/tauriRuntime";
 import { applyParsedConnectionUrl, parseConnectionUrl } from "@/lib/connectionUrl";
 import { connectionUrlPlaceholder as getUrlPlaceholder } from "@/lib/connectionPresentation";
-import { supportsDriverManagement } from "@/lib/databaseCapabilities";
+import { showAgentDriverInstallHint, type AgentDriverInstallState } from "@/lib/agentDriverInstallHint";
 import { ArrowLeft, ChevronRight, Copy, ExternalLink, FolderOpen, Grid3X3, Link2, List, Search } from "lucide-vue-next";
 
 type DbOption = { value: string; label: string };
@@ -87,6 +88,7 @@ const customDriverName = ref("");
 const mongoUseUrl = ref(false);
 const jdbcDriverPathsInput = ref("");
 const jdbcDrivers = ref<JdbcDriverInfo[]>([]);
+const agentDrivers = ref<AgentDriverInstallState[]>([]);
 const selectedJdbcDriverPath = ref("");
 const connectionUrlInput = ref("");
 const dialogStep = ref<DialogStep>("select");
@@ -461,6 +463,9 @@ const isJdbcConnection = computed(() => form.value.db_type === "jdbc");
 const connectionUrlPlaceholder = computed(() => getUrlPlaceholder(form.value.db_type));
 const canUseSsh = computed(() => form.value.db_type !== "sqlite");
 const canUseProxy = computed(() => form.value.db_type !== "sqlite" && form.value.db_type !== "duckdb");
+const shouldShowAgentDriverInstallHint = computed(() =>
+  showAgentDriverInstallHint(form.value.db_type, agentDrivers.value),
+);
 const testResultMessage = computed(() => {
   if (!testResult.value) return "";
   return testResult.value.ok ? t("connection.testSuccess") : testResult.value.message;
@@ -581,6 +586,7 @@ watch(open, (value) => {
     resetForm();
   }
   void loadJdbcDrivers();
+  void loadAgentDrivers();
 });
 
 watch(canUseSsh, (value) => {
@@ -695,6 +701,22 @@ async function loadJdbcDrivers() {
     jdbcDrivers.value = await api.listJdbcDrivers();
   } catch {
     jdbcDrivers.value = [];
+  }
+}
+
+async function loadAgentDrivers() {
+  if (!isDesktop) return;
+  try {
+    agentDrivers.value = await invoke<AgentDriverInstallState[]>("list_installed_agents_local");
+    invoke<AgentDriverInstallState[]>("list_installed_agents")
+      .then((drivers) => {
+        agentDrivers.value = drivers;
+      })
+      .catch(() => {
+        /* keep local state */
+      });
+  } catch {
+    agentDrivers.value = [];
   }
 }
 
@@ -1130,7 +1152,7 @@ function openExternalUrl(url: string) {
                     <Input v-model="form.database" class="col-span-3" :placeholder="databasePlaceholder" />
                   </div>
 
-                  <div v-if="supportsDriverManagement(form.db_type)" class="grid grid-cols-4 items-center gap-4">
+                  <div v-if="shouldShowAgentDriverInstallHint" class="grid grid-cols-4 items-center gap-4">
                     <span />
                     <p class="col-span-3 text-xs text-muted-foreground">
                       需要在顶部导航栏「驱动管理」中安装对应的驱动才能连接。
