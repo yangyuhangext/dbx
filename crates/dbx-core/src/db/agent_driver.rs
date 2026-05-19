@@ -60,6 +60,7 @@ impl AgentDriverClient {
     pub async fn spawn(java_path: &str, jar_path: &str) -> Result<Self, String> {
         let mut command = Command::new(java_path);
         command.args(agent_java_args(jar_path)).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        remove_agent_proxy_env(&mut command);
 
         #[cfg(windows)]
         {
@@ -229,6 +230,10 @@ fn agent_java_args(jar_path: &str) -> Vec<String> {
         "-Dfile.encoding=UTF-8",
         "-Dsun.stdout.encoding=UTF-8",
         "-Dsun.stderr.encoding=UTF-8",
+        "-Djava.net.useSystemProxies=false",
+        "-Dhttp.proxyHost=",
+        "-Dhttps.proxyHost=",
+        "-DsocksProxyHost=",
         "-Doracle.net.disableOob=true",
         "-Doracle.jdbc.javaNetNio=false",
         "-XX:TieredStopAtLevel=1",
@@ -239,6 +244,16 @@ fn agent_java_args(jar_path: &str) -> Vec<String> {
     .into_iter()
     .map(str::to_string)
     .collect()
+}
+
+fn remove_agent_proxy_env(command: &mut Command) {
+    for key in agent_proxy_env_vars() {
+        command.env_remove(key);
+    }
+}
+
+fn agent_proxy_env_vars() -> &'static [&'static str] {
+    &["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy"]
 }
 
 fn read_agent_line<R: BufRead>(reader: &mut R, context: &str) -> Result<String, String> {
@@ -316,7 +331,7 @@ impl Drop for AgentDriverClient {
 
 #[cfg(test)]
 mod tests {
-    use super::{agent_java_args, format_agent_process_error, read_agent_line, StderrTail};
+    use super::{agent_java_args, agent_proxy_env_vars, format_agent_process_error, read_agent_line, StderrTail};
     use std::io::Cursor;
 
     #[test]
@@ -325,6 +340,27 @@ mod tests {
 
         assert!(args.iter().any(|arg| arg == "-Doracle.net.disableOob=true"));
         assert!(args.iter().any(|arg| arg == "-Doracle.jdbc.javaNetNio=false"));
+    }
+
+    #[test]
+    fn agent_java_args_disable_ambient_proxy_settings() {
+        let args = agent_java_args("/tmp/dbx-agent-opengauss.jar");
+
+        assert!(args.iter().any(|arg| arg == "-Djava.net.useSystemProxies=false"));
+        assert!(args.iter().any(|arg| arg == "-Dhttp.proxyHost="));
+        assert!(args.iter().any(|arg| arg == "-Dhttps.proxyHost="));
+        assert!(args.iter().any(|arg| arg == "-DsocksProxyHost="));
+    }
+
+    #[test]
+    fn agent_process_environment_removes_common_proxy_variables() {
+        let proxy_env_vars = agent_proxy_env_vars();
+
+        for key in
+            ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy"]
+        {
+            assert!(proxy_env_vars.contains(&key));
+        }
     }
 
     #[test]
