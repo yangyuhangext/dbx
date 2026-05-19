@@ -289,7 +289,10 @@ public final class DbxJdbcPlugin {
             }
         }
         addDatabase(result, optionalText(connection, "database"));
-        addDatabase(result, conn.getCatalog());
+        try {
+            addDatabase(result, conn.getCatalog());
+        } catch (SQLFeatureNotSupportedException | AbstractMethodError ignored) {
+        }
         return result;
     }
 
@@ -324,8 +327,14 @@ public final class DbxJdbcPlugin {
                 } catch (SQLFeatureNotSupportedException ignored) {
                 }
             }
-            if (result.isEmpty() && conn.getSchema() != null) {
-                result.add(conn.getSchema());
+            if (result.isEmpty()) {
+                try {
+                    String schema = conn.getSchema();
+                    if (schema != null) {
+                        result.add(schema);
+                    }
+                } catch (SQLFeatureNotSupportedException | AbstractMethodError ignored) {
+                }
             }
         return result;
     }
