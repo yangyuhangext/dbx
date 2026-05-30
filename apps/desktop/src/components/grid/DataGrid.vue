@@ -4269,7 +4269,9 @@ const gridContextMenuItems = computed<ContextMenuItem[]>(() => {
                                 (value: any) => updateStructuredFilterRule(rule.id, { columnName: String(value) })
                               "
                             >
-                              <SelectTrigger class="h-8 min-w-0 text-xs">
+                              <SelectTrigger
+                                class="h-8 w-full min-w-0 overflow-hidden text-xs [&_[data-slot=select-value]]:min-w-0 [&_[data-slot=select-value]]:truncate"
+                              >
                                 <SelectValue :placeholder="t('grid.filterBuilderColumn')" />
                               </SelectTrigger>
                               <SelectContent position="popper">
@@ -4289,7 +4291,9 @@ const gridContextMenuItems = computed<ContextMenuItem[]>(() => {
                                 (value: any) => updateStructuredFilterRule(rule.id, { mode: value as FilterMode })
                               "
                             >
-                              <SelectTrigger class="h-8 min-w-0 text-xs">
+                              <SelectTrigger
+                                class="h-8 w-full min-w-0 overflow-hidden text-xs [&_[data-slot=select-value]]:min-w-0 [&_[data-slot=select-value]]:truncate"
+                              >
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent position="popper">
@@ -4315,9 +4319,9 @@ const gridContextMenuItems = computed<ContextMenuItem[]>(() => {
                             />
                             <div
                               v-else
-                              class="flex h-8 items-center rounded-md border border-dashed px-2 text-xs text-muted-foreground"
+                              class="flex h-8 min-w-0 items-center overflow-hidden rounded-md border border-dashed px-2 text-xs text-muted-foreground"
                             >
-                              {{ t("grid.filterBuilderNoValue") }}
+                              <span class="truncate">{{ t("grid.filterBuilderNoValue") }}</span>
                             </div>
 
                             <Button
