@@ -363,6 +363,7 @@ pub fn run() {
             commands::cloud_sync::webdav_sync_download,
             commands::connection::test_connection,
             commands::connection::connect_db,
+            commands::connection::connection_final_proxy_port,
             commands::connection::disconnect_db,
             commands::connection::close_database_connection,
             commands::connection::refresh_connections,

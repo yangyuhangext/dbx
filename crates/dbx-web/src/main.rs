@@ -94,6 +94,7 @@ async fn main() {
         // Connection
         .route("/connection/test", post(routes::connection::test_connection))
         .route("/connection/connect", post(routes::connection::connect_db))
+        .route("/connection/final-proxy-port", post(routes::connection::connection_final_proxy_port))
         .route("/connection/disconnect", post(routes::connection::disconnect_db))
         .route("/connection/close-database", post(routes::connection::close_database_connection))
         .route("/connection/save", post(routes::connection::save_connections))

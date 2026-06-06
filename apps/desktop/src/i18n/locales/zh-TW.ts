@@ -914,6 +914,8 @@ export default {
     closeOtherTabs: "關閉其他分頁",
     closeAllTabs: "關閉全部分頁",
     copyName: "複製名稱",
+    copyFinalProxyPort: "複製最終代理連接埠",
+    finalProxyPortCopied: "最終代理連接埠 {port} 已複製",
     setDefaultDatabase: "設為預設資料庫",
     clearDefaultDatabase: "取消預設資料庫",
     exportDatabase: "匯出資料庫",

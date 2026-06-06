@@ -954,6 +954,8 @@ export default {
     closeOtherTabs: "Close Other Tabs",
     closeAllTabs: "Close All Tabs",
     copyName: "Copy Name",
+    copyFinalProxyPort: "Copy Final Proxy Port",
+    finalProxyPortCopied: "Final proxy port {port} copied",
     setDefaultDatabase: "Set as Default Database",
     clearDefaultDatabase: "Clear Default Database",
     exportDatabase: "Export Database",

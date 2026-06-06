@@ -136,6 +136,7 @@ import ProcedureExecutionDialog from "@/components/objects/ProcedureExecutionDia
 import { useExportTracker, type ExportTask } from "@/composables/useExportTracker";
 import { isTauriRuntime } from "@/lib/tauriRuntime";
 import { copyToClipboard } from "@/lib/clipboard";
+import { hasEnabledTransportLayers } from "@/lib/connectionTransport";
 import { formatShortcut } from "@/lib/shortcutRegistry";
 import DatabaseIcon from "@/components/icons/DatabaseIcon.vue";
 import ConnectionErrorIndicator from "@/components/connection/ConnectionErrorIndicator.vue";
@@ -926,6 +927,20 @@ async function copyName() {
     toast(t("connection.copied"), 2000);
   } catch (e: any) {
     toast(t("grid.copyFailed", { message: e?.message || String(e) }), 5000);
+  }
+}
+
+async function copyFinalProxyPort() {
+  const connectionId = props.node.connectionId;
+  const config = connectionId ? connectionStore.getConfig(connectionId) : undefined;
+  if (!config || !hasEnabledTransportLayers(config)) return;
+
+  try {
+    const port = await api.connectionFinalProxyPort(config);
+    await copyToClipboard(String(port));
+    toast(t("contextMenu.finalProxyPortCopied", { port }), 2000);
+  } catch (e: any) {
+    toast(t("grid.copyFailed", { message: translateBackendError(t, e?.message || String(e)) }), 5000);
   }
 }
 
@@ -2475,6 +2490,10 @@ const canConfigureVisibleDatabases = computed(() => {
   if (props.node.type !== "connection" || !props.node.connectionId) return false;
   return connectionStore.getConfig(props.node.connectionId)?.db_type !== "elasticsearch";
 });
+const canCopyFinalProxyPort = computed(() => {
+  if (props.node.type !== "connection" || !props.node.connectionId) return false;
+  return hasEnabledTransportLayers(connectionStore.getConfig(props.node.connectionId));
+});
 
 function connectionIconType(connectionId?: string) {
   const config = connectionId ? connectionStore.getConfig(connectionId) : undefined;
@@ -2845,6 +2864,9 @@ function treeItemMenuItems(): ContextMenuItem[] {
       items.push({ label: t("contextMenu.closeConnection"), action: disconnectConnection, icon: Unplug });
     }
     items.push({ label: t("contextMenu.newQuery"), action: newQuery, icon: TerminalSquare });
+    if (canCopyFinalProxyPort.value) {
+      items.push({ label: t("contextMenu.copyFinalProxyPort"), action: copyFinalProxyPort, icon: Network });
+    }
     if (canOpenSqlFileExecution.value) {
       items.push({ label: t("sqlFile.title"), action: openSqlFileExecution, icon: FileCode });
     }

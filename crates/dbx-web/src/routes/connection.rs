@@ -78,6 +78,24 @@ pub async fn connect_db(
     Ok(Json(connection_id))
 }
 
+pub async fn connection_final_proxy_port(
+    State(state): State<Arc<WebState>>,
+    Json(body): Json<ConnectRequest>,
+) -> Result<Json<u16>, AppError> {
+    let runtime_config = body.config.canonicalized();
+    if !runtime_config.has_effective_transport_layers() {
+        return Err(AppError("Connection has no configured transport layers".to_string()));
+    }
+
+    let app = &state.app;
+    let connection_id = runtime_config.id.clone();
+    let db_config = dbx_core::connection::metadata_connection_config(&runtime_config);
+    app.configs.write().await.insert(connection_id.clone(), runtime_config);
+
+    let (_, port) = app.connection_host_port(&connection_id, &db_config).await.map_err(AppError)?;
+    Ok(Json(port))
+}
+
 pub async fn disconnect_db(
     State(state): State<Arc<WebState>>,
     Json(body): Json<DisconnectRequest>,
@@ -93,8 +111,7 @@ pub async fn disconnect_db(
     }
     drop(connections);
 
-    app.tunnels.stop_tunnel(&body.connection_id).await;
-    app.proxy_tunnels.stop_tunnel(&body.connection_id).await;
+    app.reset_connection_transport(&body.connection_id).await;
 
     Ok(Json(()))
 }

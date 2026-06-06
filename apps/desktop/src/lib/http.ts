@@ -151,6 +151,10 @@ export async function connectDb(config: ConnectionConfig): Promise<string> {
   return post("/api/connection/connect", { config });
 }
 
+export async function connectionFinalProxyPort(config: ConnectionConfig): Promise<number> {
+  return post("/api/connection/final-proxy-port", { config });
+}
+
 export async function disconnectDb(connectionId: string): Promise<void> {
   return post("/api/connection/disconnect", { connectionId });
 }

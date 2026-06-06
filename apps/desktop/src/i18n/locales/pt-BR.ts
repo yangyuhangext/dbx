@@ -968,6 +968,8 @@ export default {
     closeTab: "Fechar Aba",
     closeOtherTabs: "Fechar Outras Abas",
     closeAllTabs: "Fechar Todas as Abas",
+    copyFinalProxyPort: "Copiar porta final do proxy",
+    finalProxyPortCopied: "Porta final do proxy {port} copiada",
     copyName: "Copiar Nome",
     setDefaultDatabase: "Definir como Banco de Dados Padrão",
     clearDefaultDatabase: "Limpar Banco de Dados Padrão",

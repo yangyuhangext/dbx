@@ -973,6 +973,8 @@ export default {
     closeOtherTabs: "Chiudi Altre Schede",
     closeAllTabs: "Chiudi Tutte le Schede",
     copyName: "Copia Nome",
+    copyFinalProxyPort: "Copia porta proxy finale",
+    finalProxyPortCopied: "Porta proxy finale {port} copiata",
     setDefaultDatabase: "Imposta come Database Predefinito",
     clearDefaultDatabase: "Cancella Database Predefinito",
     exportDatabase: "Esporta Database",

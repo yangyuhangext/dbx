@@ -574,6 +574,24 @@ pub async fn connect_db(state: State<'_, Arc<AppState>>, config: ConnectionConfi
 }
 
 #[tauri::command]
+pub async fn connection_final_proxy_port(
+    state: State<'_, Arc<AppState>>,
+    config: ConnectionConfig,
+) -> Result<u16, String> {
+    let runtime_config = config.canonicalized();
+    if !runtime_config.has_effective_transport_layers() {
+        return Err("Connection has no configured transport layers".to_string());
+    }
+
+    let connection_id = runtime_config.id.clone();
+    let db_config = metadata_connection_config(&runtime_config);
+    state.configs.write().await.insert(connection_id.clone(), runtime_config);
+
+    let (_, port) = state.connection_host_port(&connection_id, &db_config).await?;
+    Ok(port)
+}
+
+#[tauri::command]
 pub async fn disconnect_db(state: State<'_, Arc<AppState>>, connection_id: String) -> Result<(), String> {
     let mut conns = state.connections.write().await;
     let keys_to_remove: Vec<String> =

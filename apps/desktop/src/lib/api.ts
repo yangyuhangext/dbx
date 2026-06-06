@@ -33,6 +33,7 @@ function forward<K extends keyof Backend>(name: K): Backend[K] {
 // Connection
 export const testConnection = forward("testConnection");
 export const connectDb = forward("connectDb");
+export const connectionFinalProxyPort = forward("connectionFinalProxyPort");
 export const disconnectDb = forward("disconnectDb");
 export const closeDatabaseConnection = forward("closeDatabaseConnection");
 export const refreshConnections = forward("refreshConnections");

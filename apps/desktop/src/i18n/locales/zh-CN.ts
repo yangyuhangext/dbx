@@ -934,6 +934,8 @@ export default {
     closeOtherTabs: "关闭其他标签页",
     closeAllTabs: "关闭全部标签页",
     copyName: "复制名称",
+    copyFinalProxyPort: "复制最终代理端口",
+    finalProxyPortCopied: "最终代理端口 {port} 已复制",
     setDefaultDatabase: "设为默认数据库",
     clearDefaultDatabase: "取消默认数据库",
     exportDatabase: "导出数据库",

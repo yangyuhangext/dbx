@@ -414,6 +414,10 @@ export async function connectDb(config: ConnectionConfig): Promise<string> {
   return invoke("connect_db", { config });
 }
 
+export async function connectionFinalProxyPort(config: ConnectionConfig): Promise<number> {
+  return invoke("connection_final_proxy_port", { config });
+}
+
 export async function disconnectDb(connectionId: string): Promise<void> {
   return invoke("disconnect_db", { connectionId });
 }

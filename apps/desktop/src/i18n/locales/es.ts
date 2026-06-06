@@ -850,6 +850,8 @@ export default {
     closeOtherTabs: "Cerrar otras pestañas",
     closeAllTabs: "Cerrar todas las pestañas",
     copyName: "Copiar nombre",
+    copyFinalProxyPort: "Copiar puerto proxy final",
+    finalProxyPortCopied: "Puerto proxy final {port} copiado",
     setDefaultDatabase: "Establecer como base de datos predeterminada",
     clearDefaultDatabase: "Limpiar base de datos predeterminada",
     exportDatabase: "Exportar base de datos",
