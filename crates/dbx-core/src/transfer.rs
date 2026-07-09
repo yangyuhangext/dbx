@@ -1014,6 +1014,9 @@ pub fn escape_value_typed(val: &serde_json::Value, db_type: &DatabaseType, colum
             if let Some(numeric_literal) = format_mysql_numeric_string_literal(s, db_type, column_type) {
                 return numeric_literal;
             }
+            if let Some(date_literal) = format_oracle_date_sql_literal(s, db_type, column_type) {
+                return date_literal;
+            }
 
             let literal = format_literal_string(s, db_type, column_type);
             let escaped = if is_postgres_family_target(db_type) {
@@ -1100,6 +1103,76 @@ fn format_postgres_binary_sql_literal(
     }
 
     Some(format!("decode('{hex}', 'hex')"))
+}
+
+fn format_oracle_date_sql_literal(value: &str, db_type: &DatabaseType, column_type: Option<&str>) -> Option<String> {
+    if !matches!(db_type, DatabaseType::Oracle | DatabaseType::OceanbaseOracle) {
+        return None;
+    }
+    if temporal_column_kind(column_type) != Some("date") {
+        return None;
+    }
+    let parts = oracle_export_date_parts(value)?;
+    Some(format_oracle_date_sql_literal_parts(&parts))
+}
+
+struct OracleExportDateParts<'a> {
+    date: &'a str,
+    time: &'a str,
+    fraction: Option<&'a str>,
+}
+
+fn format_oracle_date_sql_literal_parts(parts: &OracleExportDateParts<'_>) -> String {
+    if oracle_export_date_parts_are_midnight(parts) {
+        format!("DATE '{}'", parts.date)
+    } else {
+        format!("TO_DATE('{} {}', 'YYYY-MM-DD HH24:MI:SS')", parts.date, parts.time)
+    }
+}
+
+fn oracle_export_date_parts_are_midnight(parts: &OracleExportDateParts<'_>) -> bool {
+    parts.time == "00:00:00"
+        && parts.fraction.map(|fraction| fraction.trim_start_matches('.').chars().all(|ch| ch == '0')).unwrap_or(true)
+}
+
+fn oracle_export_date_parts(value: &str) -> Option<OracleExportDateParts<'_>> {
+    let bytes = value.as_bytes();
+    if bytes.len() < 10 || bytes.get(4) != Some(&b'-') || bytes.get(7) != Some(&b'-') {
+        return None;
+    }
+    let date = &value[..10];
+    if !date.as_bytes().iter().enumerate().all(|(index, byte)| matches!(index, 4 | 7) || byte.is_ascii_digit()) {
+        return None;
+    }
+    if bytes.len() == 10 {
+        return Some(OracleExportDateParts { date, time: "00:00:00", fraction: None });
+    }
+    let separator = *bytes.get(10)?;
+    if separator != b'T' && separator != b' ' {
+        return None;
+    }
+    if bytes.len() < 19 || bytes.get(13) != Some(&b':') || bytes.get(16) != Some(&b':') {
+        return None;
+    }
+    let time = &value[11..19];
+    if !time.as_bytes().iter().enumerate().all(|(index, byte)| matches!(index, 2 | 5) || byte.is_ascii_digit()) {
+        return None;
+    }
+    let rest = &value[19..];
+    if rest.is_empty() || is_timezone_suffix(rest) {
+        return Some(OracleExportDateParts { date, time, fraction: None });
+    }
+    if let Some(after_dot) = rest.strip_prefix('.') {
+        let digit_count = after_dot.bytes().take_while(|byte| byte.is_ascii_digit()).count();
+        if digit_count == 0 {
+            return None;
+        }
+        let zone = &after_dot[digit_count..];
+        if zone.is_empty() || is_timezone_suffix(zone) {
+            return Some(OracleExportDateParts { date, time, fraction: Some(&value[19..19 + 1 + digit_count]) });
+        }
+    }
+    None
 }
 
 pub fn format_pg_array_sql_literal(arr: &[serde_json::Value]) -> String {
@@ -5638,6 +5711,37 @@ mod tests {
         assert_eq!(
             sql,
             "INSERT INTO `policies` (`dt`, `raw_text`, `d`, `t`) VALUES\n('2026-05-12 00:00:00', '2026-05-12T00:00:00+00:00', '2026-05-12', '09:30:45')"
+        );
+    }
+
+    #[test]
+    fn oracle_insert_uses_date_literals_for_date_columns() {
+        let sql = generate_insert_typed(
+            &[String::from("id"), String::from("created_on"), String::from("created_at"), String::from("raw_text")],
+            &[
+                Some(String::from("NUMBER")),
+                Some(String::from("DATE")),
+                Some(String::from("TIMESTAMP(6)")),
+                Some(String::from("VARCHAR2(64)")),
+            ],
+            &[vec![
+                json!(1),
+                json!("2022-08-25T09:58:43Z"),
+                json!("2022-08-25T09:58:43Z"),
+                json!("2022-08-25T09:58:43Z"),
+            ]],
+            "events",
+            "APP",
+            &DatabaseType::Oracle,
+        );
+
+        assert_eq!(
+            sql,
+            "INSERT INTO \"APP\".\"events\" (\"id\", \"created_on\", \"created_at\", \"raw_text\") VALUES\n(1, TO_DATE('2022-08-25 09:58:43', 'YYYY-MM-DD HH24:MI:SS'), '2022-08-25T09:58:43Z', '2022-08-25T09:58:43Z')"
+        );
+        assert_eq!(
+            escape_value_typed(&json!("2022-08-25T00:00:00Z"), &DatabaseType::Oracle, Some("DATE")),
+            "DATE '2022-08-25'"
         );
     }
 
